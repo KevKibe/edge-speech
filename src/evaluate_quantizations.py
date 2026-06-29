@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import errno
 import os
 import subprocess
 import tempfile
@@ -19,7 +20,7 @@ load_dotenv()
 
 DEFAULT_MODEL_DIR = Path("./models/omniASR-CTC-300M-v2-GGUF")
 DEFAULT_MODEL_REPO = "https://huggingface.co/KevinKibe/omniASR-CTC-300M-v2-GGUF"
-DEFAULT_CRISP_BIN = Path("./src/crispasr")
+DEFAULT_CRISP_BIN = Path(os.getenv("CRISP_BIN", "./src/crispasr"))
 DEFAULT_OUTPUT_DIR = Path("./src/results/jsonl")
 DEFAULT_QUANTIZATIONS = (
     "fp32_gguf",
@@ -55,6 +56,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-samples", type=int, default=None, help="Optional sample limit per quantization")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Directory for output JSONL files")
     parser.add_argument(
+        "--crisp-bin",
+        type=Path,
+        default=DEFAULT_CRISP_BIN,
+        help="Path to crispasr binary (can be outside this repo)",
+    )
+    parser.add_argument(
         "--hf-token",
         default=os.getenv("HF_TOKEN"),
         help="Hugging Face token (defaults to HF_TOKEN env var)",
@@ -72,46 +79,89 @@ def quant_to_model_path(model_dir: Path, quantization: str) -> Path:
     return model_dir / model_name
 
 
-def ensure_model_dir(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
-    if model_dir.exists() and any(model_dir.iterdir()):
-        return
+def _git_cmd(base_args: list[str], hf_token: str | None) -> list[str]:
+    if not hf_token:
+        return ["git", *base_args]
+    return ["git", "-c", f"http.extraHeader=Authorization: Bearer {hf_token}", *base_args]
 
-    model_dir.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[setup] model directory not found, cloning {model_repo} -> {model_dir}")
 
-    clone_cmd = ["git", "clone", model_repo, str(model_dir)]
-    if hf_token:
-        clone_cmd = [
-            "git",
-            "-c",
-            f"http.extraHeader=Authorization: Bearer {hf_token}",
-            "clone",
-            model_repo,
-            str(model_dir),
-        ]
+def _is_lfs_pointer(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            head = f.read(200)
+        return b"git-lfs.github.com/spec/v1" in head
+    except OSError:
+        return False
 
-    subprocess.run(clone_cmd, check=True)
+
+def _repo_id_from_url(model_repo: str) -> str | None:
+    marker = "huggingface.co/"
+    if marker not in model_repo:
+        return None
+    return model_repo.split(marker, 1)[1].strip("/")
+
+
+def ensure_full_model_files(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
+    gguf_files = sorted(model_dir.glob("*.gguf"))
 
     lfs_check = subprocess.run(["git", "lfs", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if lfs_check.returncode == 0:
-        lfs_cmd = ["git", "-C", str(model_dir), "lfs", "pull"]
-        if hf_token:
-            lfs_cmd = [
-                "git",
-                "-c",
-                f"http.extraHeader=Authorization: Bearer {hf_token}",
-                "-C",
-                str(model_dir),
-                "lfs",
-                "pull",
-            ]
-        subprocess.run(lfs_cmd, check=False)
+        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "install", "--local"], hf_token), check=False)
+        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "pull"], hf_token), check=False)
+        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "checkout"], hf_token), check=False)
+
+    pointer_files = [p for p in gguf_files if _is_lfs_pointer(p)]
+    if not pointer_files:
+        return
+
+    repo_id = _repo_id_from_url(model_repo)
+    if repo_id is None:
+        raise RuntimeError(
+            "Detected LFS pointer files, but model-repo is not a Hugging Face URL. "
+            "Set --model-repo to a huggingface.co repo and rerun."
+        )
+
+    try:
+        from huggingface_hub import snapshot_download
+    except Exception as exc:
+        raise RuntimeError(
+            "Detected LFS pointer files and git-lfs was not enough. Install huggingface_hub "
+            "to fetch full .gguf blobs (pip install huggingface_hub)."
+        ) from exc
+
+    print(f"[setup] detected LFS pointers, fetching full GGUF blobs from {repo_id}")
+    snapshot_download(
+        repo_id=repo_id,
+        repo_type="model",
+        token=hf_token,
+        allow_patterns=["*.gguf"],
+        local_dir=str(model_dir),
+        local_dir_use_symlinks=False,
+    )
+
+    pointer_files = [p for p in sorted(model_dir.glob("*.gguf")) if _is_lfs_pointer(p)]
+    if pointer_files:
+        names = ", ".join(p.name for p in pointer_files[:5])
+        raise RuntimeError(
+            "Some model files are still LFS pointers after download. "
+            f"Examples: {names}. Ensure git-lfs is available and HF_TOKEN has access."
+        )
+
+
+def ensure_model_dir(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
+    if not (model_dir.exists() and any(model_dir.iterdir())):
+        model_dir.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[setup] model directory not found, cloning {model_repo} -> {model_dir}")
+        subprocess.run(_git_cmd(["clone", model_repo, str(model_dir)], hf_token), check=True)
+
+    ensure_full_model_files(model_dir, model_repo, hf_token)
 
 
 def run_crispasr(
     audio_path: Path,
     model_path: Path,
     lang: str,
+    crisp_bin: Path,
     chunk_seconds: float | None,
 ) -> tuple[str, float]:
     start = time.perf_counter()
@@ -120,7 +170,7 @@ def run_crispasr(
         out_prefix = str(Path(tmpdir) / "result")
 
         cmd = [
-            str(DEFAULT_CRISP_BIN),
+            str(crisp_bin),
             "--backend",
             "omniasr",
             "-f",
@@ -139,7 +189,16 @@ def run_crispasr(
             cmd.extend(["--chunk-seconds", str(chunk_seconds)])
         cmd.append("--vad")
 
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            if exc.errno == errno.ENOEXEC:
+                raise RuntimeError(
+                    "Failed to execute crispasr binary due to Exec format error. "
+                    "This usually means src/crispasr was built for a different OS/architecture. "
+                    "Build/download a Linux binary for your notebook environment and place it at src/crispasr."
+                ) from exc
+            raise
 
         with open(f"{out_prefix}.json", "r", encoding="utf-8") as f:
             result = json.load(f)
@@ -202,6 +261,7 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
                     audio_path=Path(wav_file.name),
                     model_path=model_path,
                     lang=args.lang,
+                    crisp_bin=args.crisp_bin,
                     chunk_seconds=args.chunk_seconds,
                 )
 
@@ -261,8 +321,8 @@ def main() -> None:
 
     ensure_model_dir(args.model_dir, args.model_repo, args.hf_token)
 
-    if not DEFAULT_CRISP_BIN.exists():
-        raise FileNotFoundError(f"crispasr binary not found: {DEFAULT_CRISP_BIN}")
+    if not args.crisp_bin.exists():
+        raise FileNotFoundError(f"crispasr binary not found: {args.crisp_bin}")
 
     dataset_langs = args.dataset_langs if args.dataset_langs else [args.dataset_lang]
 
