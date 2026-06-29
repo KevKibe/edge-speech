@@ -4,7 +4,7 @@
 
 ### 1. Model Conversion
 - [x] Convert OmniLingual checkpoint to Hugging Face format using https://github.com/ahmedadelattia/omnilingual_to_hf
-- [ ] Validate HF model inference
+- [x] Validate HF model inference
 - [ ] Export FP16 GGUF model
 - [ ] Generate quantized GGUF variants:
   - [ ] Q8_0
@@ -67,3 +67,4 @@
 - [ ] Implement C++/Rust inference
 - [ ] Deploy on Android
 - [ ] Document results
+
