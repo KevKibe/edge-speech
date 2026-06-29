@@ -72,18 +72,40 @@ def quant_to_model_path(model_dir: Path, quantization: str) -> Path:
     return model_dir / model_name
 
 
-def ensure_model_dir(model_dir: Path, model_repo: str) -> None:
+def ensure_model_dir(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
     if model_dir.exists() and any(model_dir.iterdir()):
         return
 
     model_dir.parent.mkdir(parents=True, exist_ok=True)
     print(f"[setup] model directory not found, cloning {model_repo} -> {model_dir}")
 
-    subprocess.run(["git", "clone", model_repo, str(model_dir)], check=True)
+    clone_cmd = ["git", "clone", model_repo, str(model_dir)]
+    if hf_token:
+        clone_cmd = [
+            "git",
+            "-c",
+            f"http.extraHeader=Authorization: Bearer {hf_token}",
+            "clone",
+            model_repo,
+            str(model_dir),
+        ]
+
+    subprocess.run(clone_cmd, check=True)
 
     lfs_check = subprocess.run(["git", "lfs", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if lfs_check.returncode == 0:
-        subprocess.run(["git", "-C", str(model_dir), "lfs", "pull"], check=False)
+        lfs_cmd = ["git", "-C", str(model_dir), "lfs", "pull"]
+        if hf_token:
+            lfs_cmd = [
+                "git",
+                "-c",
+                f"http.extraHeader=Authorization: Bearer {hf_token}",
+                "-C",
+                str(model_dir),
+                "lfs",
+                "pull",
+            ]
+        subprocess.run(lfs_cmd, check=False)
 
 
 def run_crispasr(
@@ -237,7 +259,7 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
 def main() -> None:
     args = parse_args()
 
-    ensure_model_dir(args.model_dir, args.model_repo)
+    ensure_model_dir(args.model_dir, args.model_repo, args.hf_token)
 
     if not DEFAULT_CRISP_BIN.exists():
         raise FileNotFoundError(f"crispasr binary not found: {DEFAULT_CRISP_BIN}")
