@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import errno
+import json
 import os
 import subprocess
 import tempfile
@@ -18,25 +18,20 @@ from jiwer import cer, wer
 
 load_dotenv()
 
-DEFAULT_MODEL_DIR = Path("./models/omniASR-CTC-300M-v2-GGUF")
-DEFAULT_MODEL_REPO = "https://huggingface.co/KevinKibe/omniASR-CTC-300M-v2-GGUF"
 DEFAULT_CRISP_BIN = Path(os.getenv("CRISP_BIN", "./src/crispasr"))
 DEFAULT_OUTPUT_DIR = Path("./src/results/jsonl")
-DEFAULT_QUANTIZATIONS = (
-    "fp32_gguf",
-    "q8_0",
-    "q6_k",
-    "q5_k",
-    "q4_k",
-    "q3_k",
-    "q2_k",
-)
 REF_FIELDS = ("transcription", "transcript", "sentence", "text")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Evaluate omniASR GGUF quantizations on a Hugging Face dataset split."
+        description="Evaluate ASR models on a Hugging Face dataset split."
+    )
+    parser.add_argument(
+        "--eval-config",
+        type=Path,
+        default=None,
+        help="Optional JSON config file describing one or more eval runs",
     )
     parser.add_argument("--lang", default="swh_Latn", help="ASR language tag for crispasr")
     parser.add_argument("--dataset", default="google/fleurs", help="Hugging Face dataset name")
@@ -47,13 +42,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional list of dataset languages/configs to run in one command",
     )
-    parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR, help="Directory with .gguf models")
+    parser.add_argument(
+        "--backend",
+        default=None,
+        help="Backend passed to crispasr --backend (for example: omniasr)",
+    )
     parser.add_argument(
         "--model-repo",
-        default=DEFAULT_MODEL_REPO,
-        help="Repository to clone into --model-dir when it is missing",
+        default=None,
+        help="Value passed directly to crispasr -m",
     )
-    parser.add_argument("--max-samples", type=int, default=None, help="Optional sample limit per quantization")
+    parser.add_argument("--max-samples", type=int, default=None, help="Optional sample limit per run")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Directory for output JSONL files")
     parser.add_argument(
         "--crisp-bin",
@@ -70,96 +69,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def quant_to_model_path(model_dir: Path, quantization: str) -> Path:
-    base = "omniASR-CTC-300M-v2"
-    if quantization == "fp32_gguf":
-        model_name = f"{base}.gguf"
-    else:
-        model_name = f"{base}-{quantization}.gguf"
-    return model_dir / model_name
-
-
-def _git_cmd(base_args: list[str], hf_token: str | None) -> list[str]:
-    if not hf_token:
-        return ["git", *base_args]
-    return ["git", "-c", f"http.extraHeader=Authorization: Bearer {hf_token}", *base_args]
-
-
-def _is_lfs_pointer(path: Path) -> bool:
-    try:
-        with open(path, "rb") as f:
-            head = f.read(200)
-        return b"git-lfs.github.com/spec/v1" in head
-    except OSError:
-        return False
-
-
-def _repo_id_from_url(model_repo: str) -> str | None:
-    marker = "huggingface.co/"
-    if marker not in model_repo:
-        return None
-    return model_repo.split(marker, 1)[1].strip("/")
-
-
-def ensure_full_model_files(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
-    gguf_files = sorted(model_dir.glob("*.gguf"))
-
-    lfs_check = subprocess.run(["git", "lfs", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if lfs_check.returncode == 0:
-        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "install", "--local"], hf_token), check=False)
-        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "pull"], hf_token), check=False)
-        subprocess.run(_git_cmd(["-C", str(model_dir), "lfs", "checkout"], hf_token), check=False)
-
-    pointer_files = [p for p in gguf_files if _is_lfs_pointer(p)]
-    if not pointer_files:
-        return
-
-    repo_id = _repo_id_from_url(model_repo)
-    if repo_id is None:
-        raise RuntimeError(
-            "Detected LFS pointer files, but model-repo is not a Hugging Face URL. "
-            "Set --model-repo to a huggingface.co repo and rerun."
-        )
-
-    try:
-        from huggingface_hub import snapshot_download
-    except Exception as exc:
-        raise RuntimeError(
-            "Detected LFS pointer files and git-lfs was not enough. Install huggingface_hub "
-            "to fetch full .gguf blobs (pip install huggingface_hub)."
-        ) from exc
-
-    print(f"[setup] detected LFS pointers, fetching full GGUF blobs from {repo_id}")
-    snapshot_download(
-        repo_id=repo_id,
-        repo_type="model",
-        token=hf_token,
-        allow_patterns=["*.gguf"],
-        local_dir=str(model_dir),
-        local_dir_use_symlinks=False,
-    )
-
-    pointer_files = [p for p in sorted(model_dir.glob("*.gguf")) if _is_lfs_pointer(p)]
-    if pointer_files:
-        names = ", ".join(p.name for p in pointer_files[:5])
-        raise RuntimeError(
-            "Some model files are still LFS pointers after download. "
-            f"Examples: {names}. Ensure git-lfs is available and HF_TOKEN has access."
-        )
-
-
-def ensure_model_dir(model_dir: Path, model_repo: str, hf_token: str | None) -> None:
-    if not (model_dir.exists() and any(model_dir.iterdir())):
-        model_dir.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[setup] model directory not found, cloning {model_repo} -> {model_dir}")
-        subprocess.run(_git_cmd(["clone", model_repo, str(model_dir)], hf_token), check=True)
-
-    ensure_full_model_files(model_dir, model_repo, hf_token)
-
-
 def run_crispasr(
     audio_path: Path,
-    model_path: Path,
+    model_arg: str,
+    backend: str,
     lang: str,
     crisp_bin: Path,
     chunk_seconds: float | None,
@@ -172,11 +85,11 @@ def run_crispasr(
         cmd = [
             str(crisp_bin),
             "--backend",
-            "omniasr",
+            backend,
             "-f",
             str(audio_path),
             "-m",
-            str(model_path),
+            model_arg,
             "-l",
             lang,
             "-oj",
@@ -219,11 +132,163 @@ def get_reference(sample: dict) -> str | None:
     return None
 
 
-def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_lang: str) -> dict[str, object] | None:
-    model_path = quant_to_model_path(args.model_dir, quantization)
-    if not model_path.exists():
-        print(f"[skip:{quantization}] missing model: {model_path}")
+def _build_job_args(base_args: argparse.Namespace, **overrides: object) -> argparse.Namespace:
+    values = vars(base_args).copy()
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+def _load_eval_config(path: Path) -> dict[str, object]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("eval config must be a JSON object")
+    return data
+
+
+def _str_value(value: object | None) -> str | None:
+    if value is None:
         return None
+    return str(value)
+
+
+def _path_value(value: object | None, default_path: Path) -> Path:
+    if value is None:
+        return default_path
+    return Path(str(value))
+
+
+def _float_value(value: object | None, default_value: float | None) -> float | None:
+    if value is None:
+        return default_value
+    return float(value)
+
+
+def _int_value(value: object | None, default_value: int | None) -> int | None:
+    if value is None:
+        return default_value
+    return int(value)
+
+
+def _expand_lang_jobs(
+    *,
+    run_index: int,
+    run: dict[str, object],
+    lang_default: str | None,
+) -> list[tuple[str, str]]:
+    dataset_lang = run.get("dataset_lang")
+    dataset_langs = run.get("dataset_langs")
+    lang_map_raw = run.get("lang_map")
+    lang_map: dict[str, str] = {}
+    if lang_map_raw is not None:
+        if not isinstance(lang_map_raw, dict):
+            raise ValueError(f"runs[{run_index}].lang_map must be an object")
+        lang_map = {str(k): str(v) for k, v in lang_map_raw.items()}
+
+    jobs: list[tuple[str, str]] = []
+    if dataset_lang is not None and dataset_langs is not None:
+        raise ValueError(f"runs[{run_index}] cannot set both dataset_lang and dataset_langs")
+
+    if dataset_lang is not None:
+        if isinstance(dataset_lang, list):
+            for item in dataset_lang:
+                dlang = str(item)
+                lang = lang_map.get(dlang, lang_default)
+                if not lang:
+                    raise ValueError(f"runs[{run_index}] missing lang or lang_map entry for dataset_lang={dlang}")
+                jobs.append((dlang, lang))
+            return jobs
+        dlang = str(dataset_lang)
+        lang = lang_map.get(dlang, lang_default)
+        if not lang:
+            raise ValueError(f"runs[{run_index}] missing lang or lang_map entry for dataset_lang={dlang}")
+        jobs.append((dlang, lang))
+        return jobs
+
+    if dataset_langs is not None:
+        if not isinstance(dataset_langs, list):
+            raise ValueError(f"runs[{run_index}].dataset_langs must be a list")
+        for item in dataset_langs:
+            dlang = str(item)
+            lang = lang_map.get(dlang, lang_default)
+            if not lang:
+                raise ValueError(f"runs[{run_index}] missing lang or lang_map entry for dataset_lang={dlang}")
+            jobs.append((dlang, lang))
+        return jobs
+
+    raise ValueError(f"runs[{run_index}] must set dataset_lang or dataset_langs")
+
+
+def build_eval_jobs(args: argparse.Namespace) -> list[argparse.Namespace]:
+    if args.eval_config is None:
+        if not args.backend:
+            raise ValueError("--backend is required when --eval-config is not used")
+        if not args.model_repo:
+            raise ValueError("--model-repo is required when --eval-config is not used")
+        dataset_langs = args.dataset_langs if args.dataset_langs else [args.dataset_lang]
+        return [
+            _build_job_args(args, dataset_lang=dataset_lang, lang=args.lang)
+            for dataset_lang in dataset_langs
+        ]
+
+    cfg = _load_eval_config(args.eval_config)
+    defaults_raw = cfg.get("defaults", {})
+    if not isinstance(defaults_raw, dict):
+        raise ValueError("defaults in eval config must be an object")
+    defaults = dict(defaults_raw)
+
+    runs_raw = cfg.get("runs")
+    if not isinstance(runs_raw, list) or not runs_raw:
+        raise ValueError("eval config must contain a non-empty runs list")
+
+    jobs: list[argparse.Namespace] = []
+    for i, run_raw in enumerate(runs_raw, start=1):
+        if not isinstance(run_raw, dict):
+            raise ValueError(f"runs[{i}] must be an object")
+        run = dict(run_raw)
+
+        backend = _str_value(run.get("backend", defaults.get("backend", args.backend)))
+        model_repo = _str_value(run.get("model_repo", defaults.get("model_repo", args.model_repo)))
+        dataset = _str_value(run.get("dataset", defaults.get("dataset", args.dataset)))
+        hf_token = _str_value(run.get("hf_token", defaults.get("hf_token", args.hf_token)))
+        crisp_bin = _path_value(run.get("crisp_bin", defaults.get("crisp_bin")), args.crisp_bin)
+        output_dir = _path_value(run.get("output_dir", defaults.get("output_dir")), args.output_dir)
+        chunk_seconds = _float_value(run.get("chunk_seconds", defaults.get("chunk_seconds")), args.chunk_seconds)
+        max_samples = _int_value(run.get("max_samples", defaults.get("max_samples")), args.max_samples)
+        lang_default = _str_value(run.get("lang", defaults.get("lang", args.lang)))
+
+        if not backend:
+            raise ValueError(f"runs[{i}] missing backend")
+        if not model_repo:
+            raise ValueError(f"runs[{i}] missing model_repo")
+        if not dataset:
+            raise ValueError(f"runs[{i}] missing dataset")
+
+        lang_jobs = _expand_lang_jobs(run_index=i, run=run, lang_default=lang_default)
+        for dataset_lang, lang in lang_jobs:
+            jobs.append(
+                _build_job_args(
+                    args,
+                    backend=backend,
+                    model_repo=model_repo,
+                    dataset=dataset,
+                    dataset_lang=dataset_lang,
+                    dataset_langs=None,
+                    lang=lang,
+                    hf_token=hf_token,
+                    crisp_bin=crisp_bin,
+                    output_dir=output_dir,
+                    chunk_seconds=chunk_seconds,
+                    max_samples=max_samples,
+                )
+            )
+
+    return jobs
+
+
+def evaluate_quantization(args: argparse.Namespace, dataset_lang: str) -> dict[str, object] | None:
+    model_arg = args.model_repo
+    quantization = Path(model_arg).stem
 
     dataset = load_dataset(
         args.dataset,
@@ -233,7 +298,7 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
         token=args.hf_token,
     )
 
-    model_name = model_path.stem
+    model_name = Path(model_arg).stem
     dataset_name = args.dataset.split("/")[-1]
     output_jsonl = args.output_dir / f"{model_name}_{dataset_name}_{dataset_lang}.jsonl"
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -259,7 +324,8 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
                 sf.write(wav_file.name, audio["array"], audio["sampling_rate"])
                 pred, latency = run_crispasr(
                     audio_path=Path(wav_file.name),
-                    model_path=model_path,
+                    model_arg=model_arg,
+                    backend=args.backend,
                     lang=args.lang,
                     crisp_bin=args.crisp_bin,
                     chunk_seconds=args.chunk_seconds,
@@ -302,7 +368,7 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
     summary = {
         "quantization": quantization,
         "dataset_lang": dataset_lang,
-        "model": model_name,
+        "model": model_arg,
         "samples": n,
         "avg_wer": wer_sum / n,
         "avg_cer": cer_sum / n,
@@ -319,19 +385,15 @@ def evaluate_quantization(args: argparse.Namespace, quantization: str, dataset_l
 def main() -> None:
     args = parse_args()
 
-    ensure_model_dir(args.model_dir, args.model_repo, args.hf_token)
-
-    if not args.crisp_bin.exists():
-        raise FileNotFoundError(f"crispasr binary not found: {args.crisp_bin}")
-
-    dataset_langs = args.dataset_langs if args.dataset_langs else [args.dataset_lang]
+    jobs = build_eval_jobs(args)
 
     summaries: list[dict[str, object]] = []
-    for dataset_lang in dataset_langs:
-        for quantization in DEFAULT_QUANTIZATIONS:
-            summary = evaluate_quantization(args, quantization, dataset_lang)
-            if summary is not None:
-                summaries.append(summary)
+    for job_args in jobs:
+        if not job_args.crisp_bin.exists():
+            raise FileNotFoundError(f"crispasr binary not found: {job_args.crisp_bin}")
+        summary = evaluate_quantization(job_args, job_args.dataset_lang)
+        if summary is not None:
+            summaries.append(summary)
 
     if not summaries:
         print("No quantizations were evaluated.")

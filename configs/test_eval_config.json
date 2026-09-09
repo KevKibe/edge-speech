@@ -1,0 +1,28 @@
+{
+  "defaults": {
+    "dataset": "google/fleurs",
+    "max_samples": 10,
+    "output_dir": "src/results/jsonl",
+    "chunk_seconds": 5
+  },
+  "runs": [
+    {
+      "backend": "parakeet",
+      "model_repo": "parakeet-tdt-0.6b-v3-q4_k.gguf",
+      "dataset_langs": ["en_us", "fr_fr"],
+      "lang_map": {
+        "en_us": "en",
+        "fr_fr": "fr"
+      }
+    },
+    {
+      "backend": "parakeet",
+      "model_repo": "parakeet-tdt-0.6b-v3-q5_k.gguf",
+      "dataset_lang": ["en_us", "fr_fr"],
+      "lang_map": {
+        "en_us": "en",
+        "fr_fr": "fr"
+      }
+    }
+  ]
+}
