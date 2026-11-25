@@ -1,0 +1,44 @@
+# Quantization sweep for omniASR-CTC-7B and omniASR-LLM-7B on five of the most spoken African
+# languages in FLEURS: Swahili, Hausa, Amharic, Yoruba, Oromo.
+#
+# No 7B GGUFs are published on Hugging Face, so the models are local files. Make them with
+# CrispASR's converters and quantizer from the facebook checkpoints (26 GB and 31 GB .pt files;
+# conversion loads the whole checkpoint, so it needs about that much RAM), e.g.
+#   python CrispASR/models/convert-omniasr-ctc-to-gguf.py --input facebook/omniASR-CTC-7B --output models/omniasr-ctc-7b-f16.gguf
+#   CrispASR/build/bin/crispasr-quantize models/omniasr-ctc-7b-f16.gguf models/omniasr-ctc-7b-q4_k.gguf q4_k
+# The LLM converter expects omniASR_tokenizer.model, but facebook/omniASR-LLM-7B ships
+# omniASR_tokenizer_v7.model, so convert it from a local download of the repo.
+#
+# Run:  uv run edge-speech-eval --sweep configs/sweeps/fleurs_omniasr_7b_african_quant.yaml
+defaults:
+  dataset: fleurs
+  languages: [sw_ke, ha_ng, am_et, yo_ng, om_et]
+  runner: cli
+  batch_size: 8
+
+runs:
+  - backend: omniasr
+    models:
+      - path: models/omniasr-ctc-7b-q2_k.gguf
+      - path: models/omniasr-ctc-7b-q3_k.gguf
+      - path: models/omniasr-ctc-7b-q4_0.gguf
+      - path: models/omniasr-ctc-7b-q4_1.gguf
+      - path: models/omniasr-ctc-7b-q4_k.gguf
+      - path: models/omniasr-ctc-7b-q5_0.gguf
+      - path: models/omniasr-ctc-7b-q5_1.gguf
+      - path: models/omniasr-ctc-7b-q5_k.gguf
+      - path: models/omniasr-ctc-7b-q6_k.gguf
+      - path: models/omniasr-ctc-7b-q8_0.gguf
+
+  - backend: omniasr-llm
+    models:
+      - path: models/omniasr-llm-7b-q2_k.gguf
+      - path: models/omniasr-llm-7b-q3_k.gguf
+      - path: models/omniasr-llm-7b-q4_0.gguf
+      - path: models/omniasr-llm-7b-q4_1.gguf
+      - path: models/omniasr-llm-7b-q4_k.gguf
+      - path: models/omniasr-llm-7b-q5_0.gguf
+      - path: models/omniasr-llm-7b-q5_1.gguf
+      - path: models/omniasr-llm-7b-q5_k.gguf
+      - path: models/omniasr-llm-7b-q6_k.gguf
+      - path: models/omniasr-llm-7b-q8_0.gguf
