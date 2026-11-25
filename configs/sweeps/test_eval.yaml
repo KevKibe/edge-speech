@@ -1,0 +1,15 @@
+# Quick smoke sweep (replaces configs/test_eval_config.json).
+# Run:  uv run edge-speech-eval --sweep configs/sweeps/test_eval.yaml
+defaults:
+  dataset: fleurs
+  max_samples: 10
+  runner: cli        # cli = crispasr binary, one process per batch; session = Python bindings
+  batch_size: 10
+
+runs:
+  - backend: parakeet
+    languages: [en_us, fr_fr]
+    quant_sweep:
+      repo: cstr/parakeet-tdt-0.6b-v3-GGUF
+      file_template: "parakeet-tdt-0.6b-v3-{quant}.gguf"
+      quants: [q4_k, q5_0, q8_0]   # what cstr/parakeet-tdt-0.6b-v3-GGUF hosts

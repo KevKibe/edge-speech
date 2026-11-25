@@ -1,0 +1,112 @@
+# Canonical language registry, keyed by FLORES-200 code (ISO 639-3 + script).
+#
+#   name:            human-readable name
+#   iso1:            ISO 639-1 code (what most CrispASR backends take via -l); null if none exists
+#   space_delimited: false for scripts written without spaces between words. WER is
+#                    meaningless there, so the analysis reports CER as the primary metric.
+#
+# Datasets map their own language keys onto these (see datasets.yaml), so FLEURS
+# "sw_ke" and Common Voice "sw" both resolve to swh_Latn.
+
+afr_Latn: {name: Afrikaans, iso1: af}
+amh_Ethi: {name: Amharic, iso1: am}
+arb_Arab: {name: Arabic, iso1: ar}
+asm_Beng: {name: Assamese, iso1: as}
+ast_Latn: {name: Asturian, iso1: null}
+azj_Latn: {name: Azerbaijani, iso1: az}
+bel_Cyrl: {name: Belarusian, iso1: be}
+bul_Cyrl: {name: Bulgarian, iso1: bg}
+ben_Beng: {name: Bengali, iso1: bn}
+bos_Latn: {name: Bosnian, iso1: bs}
+cat_Latn: {name: Catalan, iso1: ca}
+ceb_Latn: {name: Cebuano, iso1: null}
+ckb_Arab: {name: Central Kurdish, iso1: null}
+zho_Hans: {name: Mandarin Chinese, iso1: zh, space_delimited: false}
+ces_Latn: {name: Czech, iso1: cs}
+cym_Latn: {name: Welsh, iso1: cy}
+dan_Latn: {name: Danish, iso1: da}
+deu_Latn: {name: German, iso1: de}
+ell_Grek: {name: Greek, iso1: el}
+eng_Latn: {name: English, iso1: en}
+spa_Latn: {name: Spanish, iso1: es}
+est_Latn: {name: Estonian, iso1: et}
+pes_Arab: {name: Persian, iso1: fa}
+fuv_Latn: {name: Fula, iso1: ff}
+fin_Latn: {name: Finnish, iso1: fi}
+tgl_Latn: {name: Filipino, iso1: tl}
+fra_Latn: {name: French, iso1: fr}
+gle_Latn: {name: Irish, iso1: ga}
+glg_Latn: {name: Galician, iso1: gl}
+guj_Gujr: {name: Gujarati, iso1: gu}
+hau_Latn: {name: Hausa, iso1: ha}
+heb_Hebr: {name: Hebrew, iso1: he}
+hin_Deva: {name: Hindi, iso1: hi}
+hrv_Latn: {name: Croatian, iso1: hr}
+hun_Latn: {name: Hungarian, iso1: hu}
+hye_Armn: {name: Armenian, iso1: hy}
+ind_Latn: {name: Indonesian, iso1: id}
+ibo_Latn: {name: Igbo, iso1: ig}
+isl_Latn: {name: Icelandic, iso1: is}
+ita_Latn: {name: Italian, iso1: it}
+jpn_Jpan: {name: Japanese, iso1: ja, space_delimited: false}
+jav_Latn: {name: Javanese, iso1: jv}
+kat_Geor: {name: Georgian, iso1: ka}
+kam_Latn: {name: Kamba, iso1: null}
+kea_Latn: {name: Kabuverdianu, iso1: null}
+kaz_Cyrl: {name: Kazakh, iso1: kk}
+khm_Khmr: {name: Khmer, iso1: km, space_delimited: false}
+kan_Knda: {name: Kannada, iso1: kn}
+kor_Hang: {name: Korean, iso1: ko}
+kir_Cyrl: {name: Kyrgyz, iso1: ky}
+ltz_Latn: {name: Luxembourgish, iso1: lb}
+lug_Latn: {name: Ganda, iso1: lg}
+lin_Latn: {name: Lingala, iso1: ln}
+lao_Laoo: {name: Lao, iso1: lo, space_delimited: false}
+lit_Latn: {name: Lithuanian, iso1: lt}
+luo_Latn: {name: Luo, iso1: null}
+lvs_Latn: {name: Latvian, iso1: lv}
+mri_Latn: {name: Maori, iso1: mi}
+mkd_Cyrl: {name: Macedonian, iso1: mk}
+mal_Mlym: {name: Malayalam, iso1: ml}
+khk_Cyrl: {name: Mongolian, iso1: mn}
+mar_Deva: {name: Marathi, iso1: mr}
+zsm_Latn: {name: Malay, iso1: ms}
+mlt_Latn: {name: Maltese, iso1: mt}
+mya_Mymr: {name: Burmese, iso1: my, space_delimited: false}
+nob_Latn: {name: Norwegian Bokmål, iso1: nb}
+npi_Deva: {name: Nepali, iso1: ne}
+nld_Latn: {name: Dutch, iso1: nl}
+nso_Latn: {name: Northern Sotho, iso1: null}
+nya_Latn: {name: Nyanja, iso1: ny}
+oci_Latn: {name: Occitan, iso1: oc}
+gaz_Latn: {name: Oromo, iso1: om}
+ory_Orya: {name: Odia, iso1: or}
+pan_Guru: {name: Punjabi, iso1: pa}
+pol_Latn: {name: Polish, iso1: pl}
+pbt_Arab: {name: Pashto, iso1: ps}
+por_Latn: {name: Portuguese, iso1: pt}
+ron_Latn: {name: Romanian, iso1: ro}
+rus_Cyrl: {name: Russian, iso1: ru}
+snd_Arab: {name: Sindhi, iso1: sd}
+slk_Latn: {name: Slovak, iso1: sk}
+slv_Latn: {name: Slovenian, iso1: sl}
+sna_Latn: {name: Shona, iso1: sn}
+som_Latn: {name: Somali, iso1: so}
+srp_Cyrl: {name: Serbian, iso1: sr}
+swe_Latn: {name: Swedish, iso1: sv}
+swh_Latn: {name: Swahili, iso1: sw}
+tam_Taml: {name: Tamil, iso1: ta}
+tel_Telu: {name: Telugu, iso1: te}
+tgk_Cyrl: {name: Tajik, iso1: tg}
+tha_Thai: {name: Thai, iso1: th, space_delimited: false}
+tur_Latn: {name: Turkish, iso1: tr}
+ukr_Cyrl: {name: Ukrainian, iso1: uk}
+umb_Latn: {name: Umbundu, iso1: null}
+urd_Arab: {name: Urdu, iso1: ur}
+uzn_Latn: {name: Uzbek, iso1: uz}
+vie_Latn: {name: Vietnamese, iso1: vi}
+wol_Latn: {name: Wolof, iso1: wo}
+xho_Latn: {name: Xhosa, iso1: xh}
+yor_Latn: {name: Yoruba, iso1: yo}
+yue_Hant: {name: Cantonese, iso1: null, space_delimited: false}
+zul_Latn: {name: Zulu, iso1: zu}

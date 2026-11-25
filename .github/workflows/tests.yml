@@ -1,0 +1,48 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CRISPASR_REF: v0.8.55          # CrispASR version built by build_binary.sh; bump to upgrade
+  BUILD_TARGET: crispasr-cli crispasr-lib
+
+jobs:
+  tests:
+    # Real crispasr build, real models (whisper tiny.en, moonshine auto) and real FLEURS samples.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3   # setup-uv publishes no major-only tags after v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Cache CrispASR checkout and build
+        uses: actions/cache@v6
+        with:
+          path: |
+            CrispASR
+            bin
+          key: crispasr-${{ runner.os }}-${{ env.CRISPASR_REF }}-cli-lib-${{ hashFiles('build_binary.sh') }}
+
+      - name: Build crispasr
+        run: ./build_binary.sh
+
+      - name: Cache models
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/huggingface/hub
+            ~/.cache/crispasr
+          key: models-${{ hashFiles('tests/conftest.py', 'tests/test_transcription.py') }}
+          restore-keys: models-
+
+      - run: uv sync --locked --group dev
+      - name: Install the crispasr Python bindings (session runner)
+        run: uv pip install -e CrispASR/python
+
+      - run: uv run pytest -q -s

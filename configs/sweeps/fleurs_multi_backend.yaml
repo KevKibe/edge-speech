@@ -1,0 +1,23 @@
+# Several backends on the same FLEURS languages. Languages a backend doesn't
+# support (per configs/backends.yaml) are skipped and listed at startup;
+# check with --dry-run first.
+defaults:
+  dataset: fleurs
+  max_samples: 10
+  runner: cli
+  batch_size: 25
+
+runs:
+  - backend: parakeet
+    languages: [en_us, fr_fr, de_de] 
+    models: ["auto:q4_k", "auto:q8_0"]
+
+  - backend: whisper
+    languages: [en_us, fr_fr, de_de, sw_ke]
+    models:
+      - hf: ggerganov/whisper.cpp:ggml-small.bin
+
+  - backend: omniasr
+    languages: [en_us, fr_fr, de_de, sw_ke]
+    models:
+      - hf: cstr/omniASR-CTC-300M-v2-GGUF:omniasr-ctc-300m-v2-q4_k.gguf

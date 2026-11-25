@@ -1,5 +1,14 @@
-.python-version
 .venv/
 .env
 __pycache__/
-src/crispasr
+.pytest_cache/
+.coverage
+*.egg-info/
+
+# CrispASR source checkout and built binary (see build_binary.sh)
+/CrispASR/
+/bin/
+
+# Locally quantized models
+/models/
+results

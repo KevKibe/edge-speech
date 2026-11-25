@@ -1,0 +1,22 @@
+# Quantization sweep for omniASR-CTC-300M-v2 on FLEURS.
+#
+# cstr/omniASR-CTC-300M-v2-GGUF only hosts the full-precision file, q8_0 and q4_k.
+# Other quants have to be made locally with CrispASR's quantizer, e.g.
+#   CrispASR/build/bin/crispasr-quantize omniasr-ctc-300m-v2.gguf models/omniasr-ctc-300m-v2-q6_k.gguf q6_k
+# and listed as `path:` entries (uncomment below).
+defaults:
+  dataset: fleurs
+  runner: cli
+  batch_size: 32
+
+runs:
+  - backend: omniasr
+    languages: [sw_ke]          # or `all` for every FLEURS language
+    models:
+      - hf: cstr/omniASR-CTC-300M-v2-GGUF:omniasr-ctc-300m-v2.gguf
+      - hf: cstr/omniASR-CTC-300M-v2-GGUF:omniasr-ctc-300m-v2-q8_0.gguf
+      - hf: cstr/omniASR-CTC-300M-v2-GGUF:omniasr-ctc-300m-v2-q4_k.gguf
+      # - path: models/omniasr-ctc-300m-v2-q6_k.gguf
+      # - path: models/omniasr-ctc-300m-v2-q5_k.gguf
+      # - path: models/omniasr-ctc-300m-v2-q3_k.gguf
+      # - path: models/omniasr-ctc-300m-v2-q2_k.gguf

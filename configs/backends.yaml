@@ -1,0 +1,96 @@
+# CrispASR backend registry: how each backend wants its language code, and which
+# languages it supports. Jobs for unsupported languages are skipped, not run.
+#
+#   lang_style:    iso1   -> pass the ISO 639-1 code via -l (most backends)
+#                  flores -> pass the FLORES-200 code (e.g. swh_Latn)
+#                  none   -> don't pass -l (single-language / CTC models that ignore it)
+#   languages:     codes the backend accepts, in its own style. Omit (or null) = any language.
+#   lang_aliases:  FLORES code -> backend-specific code, for codes that differ from ISO 639-1
+#   options:       run defaults, overridable per run in a sweep:
+#                    vad (bool), chunk_seconds (float|null), threads (int), extra_args (list)
+#
+# `crispasr --list-backends-json` lists capabilities but not languages, so the
+# language lists below come from the CrispASR README (v0.8.55) and upstream model
+# cards. Check them against the model card before trusting a "skipped" job.
+# Backends not listed here can still be used; they get lang_style iso1 and accept any language.
+
+whisper:
+  lang_style: iso1
+  lang_aliases: {jav_Latn: jw, nob_Latn: "no", yue_Hant: yue}
+  languages: [en, zh, de, es, ru, ko, fr, ja, pt, tr, pl, ca, nl, ar, sv, it, id, hi, fi, vi,
+              he, uk, el, ms, cs, ro, da, hu, ta, "no", th, ur, hr, bg, lt, la, mi, ml, cy, sk,
+              te, fa, lv, bn, sr, az, sl, kn, et, mk, br, eu, is, hy, ne, mn, bs, kk, sq, sw,
+              gl, mr, pa, si, km, sn, yo, so, af, oc, ka, be, tg, sd, gu, am, yi, lo, uz, fo,
+              ht, ps, tk, nn, mt, sa, lb, my, bo, tl, mg, as, tt, haw, ln, ha, ba, jw, su, yue]
+
+parakeet:
+  # parakeet-tdt-0.6b-v3 (25 European languages). English-only parakeet variants
+  # (v2, 1.1b, tdt_ctc-*) should be run with `languages: [en_us]` in the sweep.
+  lang_style: iso1
+  languages: [bg, hr, cs, da, nl, en, et, fi, fr, de, el, hu, it, lv, lt, mt, pl, pt, ro, sk,
+              sl, es, sv, ru, uk]
+
+canary:
+  lang_style: iso1
+  languages: [bg, hr, cs, da, nl, en, et, fi, fr, de, el, hu, it, lv, lt, mt, pl, pt, ro, sk,
+              sl, es, sv, ru, uk]
+
+canary-qwen:
+  lang_style: iso1
+  languages: [en]
+
+fastconformer-ctc:
+  lang_style: none
+  languages: null
+
+moonshine:
+  lang_style: iso1
+  languages: [en]
+
+cohere:
+  lang_style: iso1
+  languages: [en, fr, de, it, es, pt, el, nl, pl, zh, ja, ko, vi, ar]
+
+qwen3:
+  lang_style: iso1
+  lang_aliases: {yue_Hant: yue}
+  languages: [zh, en, yue, ar, de, fr, es, pt, id, it, ko, ru, th, vi, ja, tr, hi, ms, nl, sv,
+              da, fi, pl, cs, tl, fa, el, hu, mk, ro]
+
+qwen3-1.7b:
+  lang_style: iso1
+  lang_aliases: {yue_Hant: yue}
+  languages: [zh, en, yue, ar, de, fr, es, pt, id, it, ko, ru, th, vi, ja, tr, hi, ms, nl, sv,
+              da, fi, pl, cs, tl, fa, el, hu, mk, ro]
+
+voxtral:
+  lang_style: iso1
+  languages: [en, es, fr, pt, hi, de, nl, it]
+
+voxtral4b:
+  lang_style: iso1
+  languages: [en, fr, es, de, ru, zh, ja, it, pt, nl, ar, hi, ko]
+
+sensevoice:
+  lang_style: iso1
+  lang_aliases: {yue_Hant: yue}
+  languages: [zh, en, yue, ja, ko]
+
+gemma4-e2b:
+  lang_style: iso1
+  languages: null
+
+omniasr:
+  # 1600+ languages. The CTC variants ignore the language; the LLM variant uses it
+  # for conditioning, so the FLORES code is always passed.
+  lang_style: flores
+  languages: null
+
+omniasr-llm:
+  lang_style: flores
+  languages: null
+
+wav2vec2:
+  # Each wav2vec2 checkpoint is single-language; restrict `languages:` in the sweep.
+  lang_style: none
+  languages: null
